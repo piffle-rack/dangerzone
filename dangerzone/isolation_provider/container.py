@@ -7,6 +7,7 @@ import pipes
 import platform
 import shutil
 import subprocess
+import sys
 import tempfile
 from typing import Callable, List, Optional, Tuple
 
@@ -23,6 +24,8 @@ else:
 
 
 log = logging.getLogger(__name__)
+
+CONTAINER_LOG_EXT = "container_log"
 
 
 class NoContainerTechException(Exception):
@@ -134,17 +137,39 @@ class Container(IsolationProvider):
 
         return installed
 
-    def parse_progress(self, document: Document, line: str) -> Tuple[bool, str, int]:
+    def log_container_output(
+        self, document: Document, line: str, error: bool = False
+    ) -> None:
+        if not getattr(sys, "dangerzone_dev", False):
+            # Skip logging when in production mode
+            return
+        if error:
+            line = f"error: {line}"
+        log.debug(f"[ CONTAINER ] {line.rstrip()}")
+
+        # Log to .log file
+        if os.environ.get("DZ_LOG_CONTAINER", "no").lower() in ["yes", "true"]:
+            with open(f"{document.input_filename}.{CONTAINER_LOG_EXT}", "a") as f:
+                f.write(f"{line.rstrip()}\n")
+
+    def parse_progress(
+        self, document: Document, line: str
+    ) -> Optional[Tuple[bool, str, int]]:
         """
         Parses a line returned by the container.
         """
         try:
             status = json.loads(line)
         except:
-            error_message = f"Invalid JSON returned from container:\n\n\t {line}"
-            log.error(error_message)
-            return (True, error_message, -1)
+            if line.startswith("DEBUG:") and getattr(sys, "dangerzone_dev", False):
+                self.log_container_output(document, line.lstrip("DEBUG:"))
+                return None
+            else:
+                error_message = f"Invalid JSON returned from container:\n\n\t {line}"
+                log.error(error_message)
+                return (True, error_message, -1)
 
+        self.log_container_output(document, status["text"], status["error"])
         self.print_progress(
             document, status["error"], status["text"], status["percentage"]
         )
@@ -170,9 +195,11 @@ class Container(IsolationProvider):
         ) as p:
             if p.stdout is not None:
                 for line in p.stdout:
-                    (error, text, percentage) = self.parse_progress(document, line)
-                    if stdout_callback:
-                        stdout_callback(error, text, percentage)
+                    progress_tuple = self.parse_progress(document, line)
+                    if progress_tuple is not None:
+                        (error, text, percentage) = progress_tuple
+                        if stdout_callback:
+                            stdout_callback(error, text, percentage)
 
             p.communicate()
             return p.returncode
@@ -274,6 +301,9 @@ class Container(IsolationProvider):
             "-e",
             f"ENABLE_TIMEOUTS={self.enable_timeouts}",
         ]
+        if getattr(sys, "dangerzone_dev", False):
+            extra_args += ["-e", f"DZ_DEBUG_CONTAINER=yes"]
+
         ret = self.exec_container(document, command, extra_args, stdout_callback)
         if ret != 0:
             log.error("documents-to-pixels failed")
@@ -298,6 +328,9 @@ class Container(IsolationProvider):
                 "-e",
                 f"ENABLE_TIMEOUTS={self.enable_timeouts}",
             ]
+            if getattr(sys, "dangerzone_dev", False):
+                extra_args += ["-e", f"DZ_DEBUG_CONTAINER=yes"]
+
             ret = self.exec_container(document, command, extra_args, stdout_callback)
             if ret != 0:
                 log.error("pixels-to-pdf failed")
@@ -313,6 +346,11 @@ class Container(IsolationProvider):
 
                 # We did it
                 success = True
+
+        if success:
+            self.log_container_output(document, "Result: SUCCESS")
+        else:
+            self.log_container_output(document, "Result: FAILURE")
 
         return success
 

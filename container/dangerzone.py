@@ -30,7 +30,9 @@ TIMEOUT_PER_MB: float = 30  # (seconds)
 TIMEOUT_MIN: float = 60  # (seconds)
 
 
-async def read_stream(sr: asyncio.StreamReader, callback: Callable = None) -> bytes:
+async def read_stream(
+    command: str, sr: asyncio.StreamReader, callback: Callable = None
+) -> bytes:
     """Consume a byte stream line-by-line.
 
     Read all lines in a stream until EOF. If a user has passed a callback, call it for
@@ -45,10 +47,13 @@ async def read_stream(sr: asyncio.StreamReader, callback: Callable = None) -> by
         line = await sr.readline()
         if sr.at_eof():
             break
+        if (
+            os.environ.get("DZ_DEBUG_CONTAINER", "no") == "yes"
+            and line.decode().rstrip() != ""
+        ):
+            print(f"DEBUG:{command}: {line.decode().rstrip()}")
         if callback is not None:
             callback(line)
-        # TODO: This would be a good place to log the received line, mostly for debug
-        # logging.
         buf += line
     return buf
 
@@ -83,8 +88,12 @@ async def run_command(
 
     # Create asynchronous tasks that will consume the standard streams of the command,
     # and call callbacks if necessary.
-    stdout_task = asyncio.create_task(read_stream(proc.stdout, stdout_callback))
-    stderr_task = asyncio.create_task(read_stream(proc.stderr, stderr_callback))
+    stdout_task = asyncio.create_task(
+        read_stream(args[0], proc.stdout, stdout_callback)
+    )
+    stderr_task = asyncio.create_task(
+        read_stream(args[0], proc.stderr, stderr_callback)
+    )
 
     # Wait until the command has finished, for a specific timeout. Then, verify that the
     # command has completed successfully. In any other case, raise an exception.
