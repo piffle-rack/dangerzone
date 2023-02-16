@@ -2,6 +2,14 @@
 
 This section documents the release process. Unless you're a dangerzone developer making a release, you'll probably never need to follow it.
 
+## Large document testing
+
+Parallel to the QA process, the release candidate should be put through the large document tests in a dedicated machine to run overnight.
+
+Follow the instructions in `docs/developer/testing.md` to run the tests.
+
+These tests will identify any regressions or progression in terms of document coverage and will allow for the
+
 ## QA
 
 To ensure that new releases do not introduce regressions, and support existing
@@ -221,3 +229,7 @@ To publish the release:
 - Update the [Dangerzone website](https://github.com/freedomofpress/dangerzone.rocks) to link to the new installers
 - Update the brew cask release of Dangerzone with a [PR like this one](https://github.com/Homebrew/homebrew-cask/pull/116319)
 - Toot release announcement on our mastodon account @dangerzone@fosstodon.org
+
+## Post Release Actions
+
+- **Train the large set on the release**, following the instructions outlined in `docs/developer/testing.md`. This will make it so future large test runs use this release as the baseline.

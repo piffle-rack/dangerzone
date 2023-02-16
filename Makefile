@@ -1,18 +1,21 @@
+LARGE_TEST_REPO_DIR:=tests/test_docs_large
+GIT_SHORT_REF=$$(git rev-parse --short HEAD)
+
 .PHONY: lint-black
 lint-black: ## check python source code formatting issues, with black
-	black --check --diff --exclude dev_scripts/envs ./
+	black --check --diff --exclude dev_scripts/envs --exclude $(LARGE_TEST_REPO_DIR) ./
 
 .PHONY: lint-black-apply
 lint-black-apply: ## apply black's source code formatting suggestions
-	black --exclude dev_scripts/envs ./
+	black --exclude dev_scripts/envs --exclude $(LARGE_TEST_REPO_DIR) ./
 
 .PHONY: lint-isort
 lint-isort: ## check imports are organized, with isort
-	isort --check-only --skip dev_scripts/envs ./
+	isort --check-only --skip dev_scripts/envs --skip $(LARGE_TEST_REPO_DIR) ./
 
 .PHONY: lint-isort-apply
 lint-isort-apply: ## apply isort's imports organization suggestions
-	isort --skip dev_scripts/envs ./
+	isort --skip dev_scripts/envs --skip $(LARGE_TEST_REPO_DIR) ./
 
 MYPY_ARGS := --ignore-missing-imports \
 			 --disallow-incomplete-defs \
@@ -40,7 +43,29 @@ lint-apply: lint-black-apply lint-isort-apply ## apply all the linter's suggesti
 
 .PHONY: test
 test:
-	python ./dev_scripts/pytest-wrapper.py -v --cov --ignore dev_scripts
+	python ./dev_scripts/pytest-wrapper.py -v --cov --ignore dev_scripts --ignore tests/test_large_set.py
+
+.PHONY: test-large-requirements
+test-large-requirements:
+	@git-lfs --version || (echo "ERROR: you need to install 'git-lfs'" && false)
+	@xmllint --version || (echo "ERROR: you need to install 'xmllint'" && false)
+
+test-large-init: test-large-requirements
+	@echo "initializing 'test_docs_large' submodule"
+	git submodule init $(LARGE_TEST_REPO_DIR)
+	git submodule update $(LARGE_TEST_REPO_DIR)
+	git lfs pull $(LARGE_TEST_REPO_DIR)
+
+TEST_LARGE_RESULTS:=$(LARGE_TEST_REPO_DIR)/results/junit/tests/commit_$(GIT_SHORT_REF).junit.xml
+.PHONY: tests-large
+test-large: test-large-init  ## Run large test set
+	python ./dev_scripts/pytest-wrapper.py tests/test_large_set.py::TestLargeSet -v --junitxml=$(TEST_LARGE_RESULTS)
+
+TEST_LARGE_TRAIN_RESULTS:=$(LARGE_TEST_REPO_DIR)/results/junit/training/commit_$(GIT_SHORT_REF).junit.xml
+test-large-train: test-large-init  ## Train large test set
+	python ./dev_scripts/pytest-wrapper.py tests/test_large_set.py::TestLargeSet -v --junitxml=$(TEST_LARGE_TRAIN_RESULTS) --train
+	xmllint --format $(TEST_LARGE_TRAIN_RESULTS) > /tmp/junit.xml && mv /tmp/junit.xml $(TEST_LARGE_TRAIN_RESULTS)
+
 
 # Makefile self-help borrowed from the securedrop-client project
 # Explaination of the below shell command should it ever break.
