@@ -270,7 +270,7 @@ class Container(IsolationProvider):
             "-v",
             f"{copied_file}:/tmp/input_file:Z",
             "-v",
-            f"{pixel_dir}:/dangerzone:Z",
+            f"{pixel_dir}:/tmp/dangerzone:Z",
             "-e",
             f"ENABLE_TIMEOUTS={self.enable_timeouts}",
         ]
@@ -288,7 +288,7 @@ class Container(IsolationProvider):
             ]
             extra_args = [
                 "-v",
-                f"{pixel_dir}:/dangerzone:Z",
+                f"{pixel_dir}:/tmp/dangerzone:Z",
                 "-v",
                 f"{safe_dir}:/safezone:Z",
                 "-e",
